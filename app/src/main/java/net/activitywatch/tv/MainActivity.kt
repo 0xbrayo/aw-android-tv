@@ -83,8 +83,20 @@ fun NowPlayingScreen(vm: NowPlayingViewModel = viewModel()) {
     ) {
         when {
             !state.hasPermission -> PermissionScreen(
+                title = "Notification Access Required",
+                body = "This app needs Notification Access permission to monitor active media sessions on your TV.",
+                buttonLabel = "Open Notification Access Settings",
                 onOpenSettings = {
                     context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                }
+            )
+
+            !state.hasUsageStatsPermission -> PermissionScreen(
+                title = "Usage Access Required",
+                body = "Grant Usage Access so ActivityWatch can track which app is active on your TV (e.g. Netflix, Jellyfin).",
+                buttonLabel = "Open Usage Access Settings",
+                onOpenSettings = {
+                    context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
                 }
             )
 
@@ -97,27 +109,32 @@ fun NowPlayingScreen(vm: NowPlayingViewModel = viewModel()) {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun PermissionScreen(onOpenSettings: () -> Unit) {
+private fun PermissionScreen(
+    title: String,
+    body: String,
+    buttonLabel: String,
+    onOpenSettings: () -> Unit,
+) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
         modifier = Modifier.padding(48.dp),
     ) {
         Text(
-            text = "Notification Access Required",
+            text = title,
             fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
             color = Color.White,
         )
         Spacer(Modifier.height(16.dp))
         Text(
-            text = "This app needs Notification Access permission to monitor active media sessions on your TV.",
+            text = body,
             fontSize = 18.sp,
             color = Color.White.copy(alpha = 0.7f),
         )
         Spacer(Modifier.height(32.dp))
         Button(onClick = onOpenSettings) {
-            Text("Open Notification Access Settings", fontSize = 16.sp)
+            Text(buttonLabel, fontSize = 16.sp)
         }
     }
 }

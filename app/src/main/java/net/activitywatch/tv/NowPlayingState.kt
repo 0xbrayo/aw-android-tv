@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 
 data class NowPlayingState(
     val hasPermission: Boolean = false,
+    val hasUsageStatsPermission: Boolean = false,
     val hasActiveSession: Boolean = false,
     val isPlaying: Boolean = false,
     val title: String? = null,

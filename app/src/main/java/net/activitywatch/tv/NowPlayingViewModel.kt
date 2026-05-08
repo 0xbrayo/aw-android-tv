@@ -2,6 +2,7 @@ package net.activitywatch.tv
 
 import android.app.Application
 import android.content.ComponentName
+import android.content.Intent
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
@@ -65,7 +66,12 @@ class NowPlayingViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     init {
-        _state.update { it.copy(hasPermission = isNotificationListenerEnabled()) }
+        _state.update {
+            it.copy(
+                hasPermission = isNotificationListenerEnabled(),
+                hasUsageStatsPermission = UsageStatsWatcherService.hasPermission(app),
+            )
+        }
         viewModelScope.launch(Dispatchers.IO) {
             heartbeatSvc.ensureBucketExists(
                 Bucket(
@@ -82,6 +88,13 @@ class NowPlayingViewModel(app: Application) : AndroidViewModel(app) {
             MediaSessionListenerService.isConnected.collect { connected ->
                 if (connected) startMonitoring() else handleDisconnect()
             }
+        }
+        viewModelScope.launch {
+            while (!UsageStatsWatcherService.hasPermission(app)) {
+                delay(2_000)
+            }
+            _state.update { it.copy(hasUsageStatsPermission = true) }
+            app.startForegroundService(Intent(app, UsageStatsWatcherService::class.java))
         }
     }
 
