@@ -21,11 +21,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -33,9 +35,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -54,6 +58,13 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalTvMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        startForegroundService(Intent(this, WatcherForegroundService::class.java))
+        if (UsageStatsWatcherService.hasPermission(this)) {
+            startForegroundService(Intent(this, UsageStatsWatcherService::class.java))
+        }
+        if (JellyfinConfig(this).isConfigured) {
+            startForegroundService(Intent(this, JellyfinPollerService::class.java))
+        }
         setContent {
             AwandroidtvTheme {
                 Surface(
@@ -74,6 +85,12 @@ private val RectangleShape = androidx.compose.ui.graphics.RectangleShape
 fun NowPlayingScreen(vm: NowPlayingViewModel = viewModel()) {
     val state by vm.state.collectAsState()
     val context = LocalContext.current
+    var showDashboard by remember { mutableStateOf(false) }
+
+    if (showDashboard) {
+        DashboardScreen(onBack = { showDashboard = false })
+        return
+    }
 
     Box(
         modifier = Modifier
@@ -100,9 +117,22 @@ fun NowPlayingScreen(vm: NowPlayingViewModel = viewModel()) {
                 }
             )
 
-            !state.hasActiveSession -> IdleScreen()
+            !state.hasActiveSession -> IdleScreen(
+                isJellyfinConfigured = state.isJellyfinConfigured,
+                currentServerUrl = state.jellyfinServerUrl,
+                currentApiKey = state.jellyfinApiKey,
+                onSaveJellyfin = { url, key -> vm.saveJellyfinConfig(url, key) },
+                onOpenDashboard = { showDashboard = true },
+            )
 
-            else -> MediaInfoScreen(state)
+            else -> MediaInfoScreen(
+                state = state,
+                isJellyfinConfigured = state.isJellyfinConfigured,
+                currentServerUrl = state.jellyfinServerUrl,
+                currentApiKey = state.jellyfinApiKey,
+                onSaveJellyfin = { url, key -> vm.saveJellyfinConfig(url, key) },
+                onOpenDashboard = { showDashboard = true },
+            )
         }
     }
 }
@@ -141,7 +171,15 @@ private fun PermissionScreen(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun IdleScreen() {
+private fun IdleScreen(
+    isJellyfinConfigured: Boolean,
+    currentServerUrl: String,
+    currentApiKey: String,
+    onSaveJellyfin: (url: String, apiKey: String) -> Unit,
+    onOpenDashboard: () -> Unit,
+) {
+    var showJellyfinSetup by remember { mutableStateOf(false) }
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -159,12 +197,126 @@ private fun IdleScreen() {
             fontSize = 18.sp,
             color = Color.White.copy(alpha = 0.6f),
         )
+        Spacer(Modifier.height(32.dp))
+
+        Button(onClick = onOpenDashboard) {
+            Text("Dashboard", fontSize = 16.sp)
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        if (showJellyfinSetup) {
+            JellyfinSetupForm(
+                initialServerUrl = currentServerUrl,
+                initialApiKey = currentApiKey,
+                onSave = { url, key ->
+                    onSaveJellyfin(url, key)
+                    showJellyfinSetup = false
+                },
+                onCancel = { showJellyfinSetup = false },
+            )
+        } else {
+            JellyfinStatusRow(
+                isConfigured = isJellyfinConfigured,
+                serverUrl = currentServerUrl,
+                onEdit = { showJellyfinSetup = true },
+            )
+        }
     }
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun MediaInfoScreen(state: NowPlayingState) {
+private fun JellyfinStatusRow(
+    isConfigured: Boolean,
+    serverUrl: String,
+    onEdit: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (isConfigured) {
+            Text(
+                text = "Jellyfin: $serverUrl",
+                fontSize = 14.sp,
+                color = Color(0xFF4CAF50),
+            )
+        }
+        Button(onClick = onEdit) {
+            Text(if (isConfigured) "Edit Jellyfin" else "Setup Jellyfin", fontSize = 16.sp)
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun JellyfinSetupForm(
+    initialServerUrl: String,
+    initialApiKey: String,
+    onSave: (url: String, apiKey: String) -> Unit,
+    onCancel: () -> Unit,
+) {
+    var serverUrl by remember { mutableStateOf(initialServerUrl) }
+    var apiKey by remember { mutableStateOf(initialApiKey) }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+            .padding(24.dp)
+            .fillMaxWidth(0.5f),
+    ) {
+        Text("Jellyfin", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Text(
+            "Create an API key in Jellyfin Dashboard → API Keys",
+            fontSize = 13.sp,
+            color = Color.White.copy(alpha = 0.5f),
+        )
+        Spacer(Modifier.height(20.dp))
+
+        LabeledField("Server URL (e.g. http://192.168.1.x:8096)", serverUrl) { serverUrl = it }
+        Spacer(Modifier.height(12.dp))
+        LabeledField("API Key", apiKey) { apiKey = it }
+
+        Spacer(Modifier.height(20.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(onClick = onCancel) { Text("Cancel") }
+            Button(onClick = { onSave(serverUrl, apiKey) }) { Text("Save") }
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun LabeledField(label: String, value: String, onChange: (String) -> Unit) {
+    Column {
+        Text(label, fontSize = 12.sp, color = Color.White.copy(alpha = 0.5f))
+        Spacer(Modifier.height(4.dp))
+        BasicTextField(
+            value = value,
+            onValueChange = onChange,
+            textStyle = TextStyle(color = Color.White, fontSize = 15.sp),
+            cursorBrush = SolidColor(Color.White),
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(6.dp))
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+        )
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun MediaInfoScreen(
+    state: NowPlayingState,
+    isJellyfinConfigured: Boolean,
+    currentServerUrl: String,
+    currentApiKey: String,
+    onSaveJellyfin: (url: String, apiKey: String) -> Unit,
+    onOpenDashboard: () -> Unit,
+) {
+    var showJellyfinSetup by remember { mutableStateOf(false) }
     var livePosition by remember(state.position) { mutableLongStateOf(state.position) }
 
     LaunchedEffect(state.position, state.isPlaying) {
@@ -179,13 +331,25 @@ private fun MediaInfoScreen(state: NowPlayingState) {
 
     val progress = if (state.duration > 0) (livePosition.toFloat() / state.duration).coerceIn(0f, 1f) else 0f
 
-    Row(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 64.dp, vertical = 48.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(48.dp),
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        if (showJellyfinSetup) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                JellyfinSetupForm(
+                    initialServerUrl = currentServerUrl,
+                    initialApiKey = currentApiKey,
+                    onSave = { url, key -> onSaveJellyfin(url, key); showJellyfinSetup = false },
+                    onCancel = { showJellyfinSetup = false },
+                )
+            }
+        } else {
+
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 64.dp, vertical = 48.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(48.dp),
+        ) {
         // Album art
         Box(
             modifier = Modifier
@@ -314,6 +478,24 @@ private fun MediaInfoScreen(state: NowPlayingState) {
                 }
             }
         }
+        }
+
+        // Top-right buttons — Jellyfin settings + Dashboard
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(24.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Button(onClick = onOpenDashboard) {
+                Text("Stats", fontSize = 14.sp)
+            }
+            Button(onClick = { showJellyfinSetup = true }) {
+                Text("⚙", fontSize = 16.sp)
+            }
+        }
+
+        } // end else
     }
 }
 

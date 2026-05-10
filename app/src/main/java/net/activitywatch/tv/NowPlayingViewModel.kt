@@ -32,6 +32,7 @@ class NowPlayingViewModel(app: Application) : AndroidViewModel(app) {
 
     private val mediaSessionManager = app.getSystemService(MediaSessionManager::class.java)
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val jellyfinConfig = JellyfinConfig(app)
 
     private val _state = MutableStateFlow(NowPlayingState())
     val state: StateFlow<NowPlayingState> = _state.asStateFlow()
@@ -70,6 +71,9 @@ class NowPlayingViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 hasPermission = isNotificationListenerEnabled(),
                 hasUsageStatsPermission = UsageStatsWatcherService.hasPermission(app),
+                isJellyfinConfigured = jellyfinConfig.isConfigured,
+                jellyfinServerUrl = jellyfinConfig.serverUrl,
+                jellyfinApiKey = jellyfinConfig.apiKey,
             )
         }
         viewModelScope.launch(Dispatchers.IO) {
@@ -212,6 +216,23 @@ class NowPlayingViewModel(app: Application) : AndroidViewModel(app) {
                 delay(60_000L)
                 sendHeartbeat(data)
             }
+        }
+    }
+
+    fun saveJellyfinConfig(serverUrl: String, apiKey: String) {
+        jellyfinConfig.serverUrl = serverUrl
+        jellyfinConfig.apiKey = apiKey
+        _state.update {
+            it.copy(
+                isJellyfinConfigured = jellyfinConfig.isConfigured,
+                jellyfinServerUrl = jellyfinConfig.serverUrl,
+                jellyfinApiKey = jellyfinConfig.apiKey,
+            )
+        }
+        if (jellyfinConfig.isConfigured) {
+            getApplication<Application>().startForegroundService(
+                Intent(getApplication(), JellyfinPollerService::class.java)
+            )
         }
     }
 
