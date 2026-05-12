@@ -180,47 +180,53 @@ private fun IdleScreen(
 ) {
     var showJellyfinSetup by remember { mutableStateOf(false) }
 
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-        modifier = Modifier.padding(48.dp),
-    ) {
-        Text(
-            text = "Nothing Playing",
-            fontSize = 32.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.White,
-        )
-        Spacer(Modifier.height(12.dp))
-        Text(
-            text = "Start playing media on your Android TV to see it here.",
-            fontSize = 18.sp,
-            color = Color.White.copy(alpha = 0.6f),
-        )
-        Spacer(Modifier.height(32.dp))
-
-        Button(onClick = onOpenDashboard) {
-            Text("Dashboard", fontSize = 16.sp)
-        }
-
-        Spacer(Modifier.height(16.dp))
-
+    Box(modifier = Modifier.fillMaxSize()) {
         if (showJellyfinSetup) {
-            JellyfinSetupForm(
-                initialServerUrl = currentServerUrl,
-                initialApiKey = currentApiKey,
-                onSave = { url, key ->
-                    onSaveJellyfin(url, key)
-                    showJellyfinSetup = false
-                },
-                onCancel = { showJellyfinSetup = false },
-            )
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                JellyfinSetupForm(
+                    initialServerUrl = currentServerUrl,
+                    initialApiKey = currentApiKey,
+                    onSave = { url, key ->
+                        onSaveJellyfin(url, key)
+                        showJellyfinSetup = false
+                    },
+                    onCancel = { showJellyfinSetup = false },
+                )
+            }
         } else {
-            JellyfinStatusRow(
-                isConfigured = isJellyfinConfigured,
-                serverUrl = currentServerUrl,
-                onEdit = { showJellyfinSetup = true },
-            )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxSize().padding(48.dp),
+            ) {
+                Text(
+                    text = "Nothing Playing",
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = "Start playing media on your Android TV to see it here.",
+                    fontSize = 18.sp,
+                    color = Color.White.copy(alpha = 0.6f),
+                )
+            }
+
+            // Top-right buttons — same position as MediaInfoScreen
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(24.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Button(onClick = onOpenDashboard) {
+                    Text("Stats", fontSize = 14.sp)
+                }
+                Button(onClick = { showJellyfinSetup = true }) {
+                    Text("⚙", fontSize = 16.sp)
+                }
+            }
         }
     }
 }
