@@ -24,19 +24,6 @@ interface EventDao {
     suspend fun getAllEventsForBucket(bucketId: String): List<Event>
 
     @Query("""
-        SELECT COALESCE(json_extract(data, '$.appLabel'), json_extract(data, '$.app'), 'Unknown') AS appLabel,
-               COALESCE(json_extract(data, '$.app'), '')                                          AS packageName,
-               SUM(duration)                                                                       AS totalDurationMs
-        FROM event
-        WHERE bucketId = :bucketId
-          AND timestamp >= :startMs
-        GROUP BY json_extract(data, '$.appLabel')
-        ORDER BY totalDurationMs DESC
-        LIMIT 15
-    """)
-    suspend fun getTopApps(bucketId: String, startMs: Long): List<AppUsageSummary>
-
-    @Query("""
         SELECT * FROM event
         WHERE bucketId = :bucketId
           AND timestamp >= :startMs

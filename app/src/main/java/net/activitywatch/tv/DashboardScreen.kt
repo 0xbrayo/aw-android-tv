@@ -1,9 +1,14 @@
 package net.activitywatch.tv
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,31 +16,45 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.tv.material3.Button
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Tab
-import androidx.tv.material3.TabRow
 import androidx.tv.material3.Text
 import net.activitywatch.tv.data.AppUsageSummary
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import java.util.concurrent.TimeUnit
+
+private val RankColors = listOf(
+    Color(0xFFFFD700), // #1 gold
+    Color(0xFFB0BEC5), // #2 silver
+    Color(0xFFCD7F32), // #3 bronze
+)
+private val DefaultBarColor = Color(0xFF5C6BC0)
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -47,107 +66,85 @@ fun DashboardScreen(
 
     val selectedRange by vm.selectedRange.collectAsState()
     val topApps by vm.topApps.collectAsState()
-    val timeline by vm.timeline.collectAsState()
+    val totalMs by vm.totalDurationMs.collectAsState()
+
+    val backFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { backFocusRequester.requestFocus() }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF0A0A0F))
-            .padding(horizontal = 48.dp, vertical = 32.dp),
-    ) {
-        Text(
-            text = "Usage Dashboard",
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.White,
-        )
-
-        Spacer(Modifier.height(20.dp))
-
-        val ranges = DashboardViewModel.Range.values()
-        val tabLabels = listOf("Today", "This Week", "This Month")
-        val selectedIndex = ranges.indexOf(selectedRange)
-
-        TabRow(selectedTabIndex = selectedIndex) {
-            ranges.forEachIndexed { index, range ->
-                Tab(
-                    selected = selectedIndex == index,
-                    onFocus = { vm.selectRange(range) },
-                    onClick = { vm.selectRange(range) },
+            .onKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown &&
+                    (event.key == Key.Back || event.key == Key.Escape)
                 ) {
+                    onBack()
+                    true
+                } else false
+            }
+            .padding(horizontal = 56.dp, vertical = 36.dp),
+    ) {
+        // Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Button(
+                onClick = onBack,
+                modifier = Modifier.focusRequester(backFocusRequester),
+            ) {
+                Text("← Back", fontSize = 14.sp)
+            }
+            Spacer(Modifier.width(20.dp))
+            Text(
+                text = "Usage Dashboard",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+            )
+            Spacer(Modifier.weight(1f))
+            if (totalMs > 0) {
+                Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        text = tabLabels[index],
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
-                        fontSize = 16.sp,
+                        text = "TOTAL",
+                        fontSize = 10.sp,
+                        letterSpacing = 2.sp,
+                        color = Color.White.copy(alpha = 0.4f),
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = formatDurationHm(totalMs),
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
                     )
                 }
             }
         }
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(28.dp))
 
-        Row(
-            modifier = Modifier.fillMaxSize(),
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
-        ) {
-            // Top Apps panel
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .background(Color.White.copy(alpha = 0.04f), RoundedCornerShape(12.dp))
-                    .padding(20.dp),
-            ) {
+        RangeSlider(
+            selected = selectedRange,
+            onSelect = vm::selectRange,
+        )
+
+        Spacer(Modifier.height(28.dp))
+
+        if (topApps.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    text = "TOP APPS",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 2.sp,
-                    color = Color.White.copy(alpha = 0.5f),
+                    text = "No data for this period",
+                    color = Color.White.copy(alpha = 0.3f),
+                    fontSize = 18.sp,
                 )
-                Spacer(Modifier.height(16.dp))
-
-                if (topApps.isEmpty()) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No data", color = Color.White.copy(alpha = 0.3f), fontSize = 16.sp)
-                    }
-                } else {
-                    val maxDuration = topApps.maxOf { it.totalDurationMs }.coerceAtLeast(1L)
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        items(topApps) { app ->
-                            AppUsageRow(app = app, maxDurationMs = maxDuration)
-                        }
-                    }
-                }
             }
-
-            // Timeline panel
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .background(Color.White.copy(alpha = 0.04f), RoundedCornerShape(12.dp))
-                    .padding(20.dp),
-            ) {
-                Text(
-                    text = "TIMELINE",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 2.sp,
-                    color = Color.White.copy(alpha = 0.5f),
-                )
-                Spacer(Modifier.height(16.dp))
-
-                if (timeline.isEmpty()) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No data", color = Color.White.copy(alpha = 0.3f), fontSize = 16.sp)
-                    }
-                } else {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        items(timeline) { item ->
-                            TimelineRow(item)
-                        }
-                    }
+        } else {
+            val maxDuration = topApps.maxOf { it.totalDurationMs }.coerceAtLeast(1L)
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                itemsIndexed(topApps) { index, app ->
+                    AppRankRow(rank = index + 1, app = app, maxDurationMs = maxDuration)
                 }
             }
         }
@@ -156,69 +153,145 @@ fun DashboardScreen(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun AppUsageRow(app: AppUsageSummary, maxDurationMs: Long) {
-    val fraction = (app.totalDurationMs.toFloat() / maxDurationMs).coerceIn(0f, 1f)
-    Column {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = app.appLabel,
-                fontSize = 15.sp,
-                color = Color.White,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                text = formatDurationHm(app.totalDurationMs),
-                fontSize = 13.sp,
-                color = Color.White.copy(alpha = 0.6f),
-            )
-        }
-        Spacer(Modifier.height(6.dp))
+private fun RangeSlider(
+    selected: DashboardViewModel.Range,
+    onSelect: (DashboardViewModel.Range) -> Unit,
+) {
+    val ranges = DashboardViewModel.Range.entries.toTypedArray()
+    val labels = listOf("Today", "This Week", "This Month")
+    val selectedIndex = ranges.indexOf(selected)
+
+    val focusRequesters = remember { Array(ranges.size) { FocusRequester() } }
+
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxWidth(0.55f)
+            .height(48.dp)
+            .background(Color.White.copy(alpha = 0.06f), RoundedCornerShape(12.dp))
+            .padding(4.dp),
+    ) {
+        val segWidth = maxWidth / ranges.size
+        val indicatorOffset by animateDpAsState(
+            targetValue = segWidth * selectedIndex,
+            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+            label = "slider",
+        )
+
+        // Sliding pill indicator
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .background(Color.White.copy(alpha = 0.08f)),
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(fraction)
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(MaterialTheme.colorScheme.primary),
-            )
+                .offset(x = indicatorOffset)
+                .width(segWidth)
+                .fillMaxHeight()
+                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(9.dp)),
+        )
+
+        // Focusable segment labels
+        Row(modifier = Modifier.fillMaxSize()) {
+            ranges.forEachIndexed { i, range ->
+                val isSelected = selectedIndex == i
+                Box(
+                    modifier = Modifier
+                        .width(segWidth)
+                        .fillMaxHeight()
+                        .focusRequester(focusRequesters[i])
+                        .focusable()
+                        .onKeyEvent { event ->
+                            if (event.type == KeyEventType.KeyDown) {
+                                when (event.key) {
+                                    Key.DirectionRight -> {
+                                        val next = (i + 1).coerceAtMost(ranges.lastIndex)
+                                        if (next != i) {
+                                            onSelect(ranges[next])
+                                            focusRequesters[next].requestFocus()
+                                        }
+                                        true
+                                    }
+                                    Key.DirectionLeft -> {
+                                        val prev = (i - 1).coerceAtLeast(0)
+                                        if (prev != i) {
+                                            onSelect(ranges[prev])
+                                            focusRequesters[prev].requestFocus()
+                                        }
+                                        true
+                                    }
+                                    Key.Enter, Key.DirectionCenter -> {
+                                        onSelect(range)
+                                        true
+                                    }
+                                    else -> false
+                                }
+                            } else false
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = labels[i],
+                        fontSize = 14.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isSelected) Color.White else Color.White.copy(alpha = 0.5f),
+                    )
+                }
+            }
         }
     }
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun TimelineRow(item: DashboardViewModel.TimelineItem) {
+private fun AppRankRow(rank: Int, app: AppUsageSummary, maxDurationMs: Long) {
+    val fraction = (app.totalDurationMs.toFloat() / maxDurationMs).coerceIn(0f, 1f)
+    val barColor = RankColors.getOrElse(rank - 1) { DefaultBarColor }
+
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.White.copy(alpha = 0.04f), RoundedCornerShape(10.dp))
+            .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        // Rank badge
         Text(
-            text = formatTime(item.startMs),
-            fontSize = 13.sp,
-            color = Color.White.copy(alpha = 0.5f),
-        )
-        Text(
-            text = item.appLabel,
+            text = "#$rank",
             fontSize = 14.sp,
-            color = Color.White,
-            modifier = Modifier.weight(1f),
+            fontWeight = FontWeight.Bold,
+            color = barColor,
+            modifier = Modifier.width(32.dp),
         )
+
+        // App name + bar
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = app.appLabel,
+                fontSize = 16.sp,
+                color = Color.White,
+                fontWeight = FontWeight.Medium,
+            )
+            Spacer(Modifier.height(6.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(5.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(Color.White.copy(alpha = 0.08f)),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(fraction)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(barColor.copy(alpha = 0.85f)),
+                )
+            }
+        }
+
+        // Duration
         Text(
-            text = formatDurationHm(item.durationMs),
-            fontSize = 13.sp,
-            color = Color.White.copy(alpha = 0.5f),
+            text = formatDurationHm(app.totalDurationMs),
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Color.White,
         )
     }
 }
@@ -234,6 +307,3 @@ private fun formatDurationHm(ms: Long): String {
         else -> "<1m"
     }
 }
-
-private fun formatTime(ms: Long): String =
-    SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(ms))
