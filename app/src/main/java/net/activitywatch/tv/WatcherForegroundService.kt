@@ -200,7 +200,7 @@ class WatcherForegroundService : Service() {
         return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("ActivityWatch")
             .setContentText("Tracking media activity")
-            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setSmallIcon(R.mipmap.ic_launcher_foreground)
             .setOngoing(true)
             .build()
     }

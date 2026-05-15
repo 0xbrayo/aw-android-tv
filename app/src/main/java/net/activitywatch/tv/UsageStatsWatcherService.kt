@@ -139,7 +139,7 @@ class UsageStatsWatcherService : Service() {
         return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("ActivityWatch")
             .setContentText("Tracking active app")
-            .setSmallIcon(android.R.drawable.ic_menu_recent_history)
+            .setSmallIcon(R.mipmap.ic_launcher_foreground)
             .setOngoing(true)
             .build()
     }

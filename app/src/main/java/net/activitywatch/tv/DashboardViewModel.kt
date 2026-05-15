@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -25,6 +27,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private val _selectedRange = MutableStateFlow(Range.DAY)
     val selectedRange: StateFlow<Range> = _selectedRange.asStateFlow()
 
+    private var loadJob: Job? = null
+
     private val _topApps = MutableStateFlow<List<AppUsageSummary>>(emptyList())
     val topApps: StateFlow<List<AppUsageSummary>> = _topApps.asStateFlow()
 
@@ -36,7 +40,11 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     fun selectRange(range: Range) {
         _selectedRange.value = range
-        load(range)
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
+            delay(300)
+            load(range)
+        }
     }
 
     private fun load(range: Range) = viewModelScope.launch(Dispatchers.IO) {
