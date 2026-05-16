@@ -31,4 +31,7 @@ interface EventDao {
         ORDER BY timestamp ASC
     """)
     suspend fun getTimelineEvents(bucketId: String, startMs: Long, endMs: Long): List<Event>
+
+    @Query("SELECT * FROM event WHERE bucketId = :bucketId AND id > :afterId ORDER BY id ASC")
+    suspend fun getEventsAfterIdForBucket(bucketId: String, afterId: Long): List<Event>
 }

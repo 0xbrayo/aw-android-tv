@@ -59,6 +59,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         startForegroundService(Intent(this, WatcherForegroundService::class.java))
+        startForegroundService(Intent(this, SyncForegroundService::class.java))
         if (UsageStatsWatcherService.hasPermission(this)) {
             startForegroundService(Intent(this, UsageStatsWatcherService::class.java))
         }

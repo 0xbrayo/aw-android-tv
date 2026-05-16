@@ -14,6 +14,7 @@ class BootReceiver : BroadcastReceiver() {
 
     private fun startServices(context: Context) {
         context.startForegroundService(Intent(context, WatcherForegroundService::class.java))
+        context.startForegroundService(Intent(context, SyncForegroundService::class.java))
         if (UsageStatsWatcherService.hasPermission(context)) {
             context.startForegroundService(Intent(context, UsageStatsWatcherService::class.java))
         }
